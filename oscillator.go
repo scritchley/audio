@@ -7,10 +7,12 @@ import (
 )
 
 type Oscillator struct {
-	Frequency  Processor
-	mtx        sync.Mutex
-	sampleRate int
-	phase      []float32
+	Frequency   Processor
+	Phase       Processor
+	phaseBuffer []float32
+	mtx         sync.Mutex
+	sampleRate  int
+	phase       []float32
 	WaveFunc
 }
 
@@ -25,9 +27,18 @@ func (o *Oscillator) Process(data []float32, channels int) {
 	if o.Frequency != nil {
 		o.Frequency.Process(data, channels)
 	}
+	if o.Phase != nil {
+		if len(o.phaseBuffer) < len(data) {
+			o.phaseBuffer = make([]float32, len(data))
+		}
+		o.Phase.Process(o.phaseBuffer, channels)
+	}
 	for i := 0; i < len(data); i += channels {
 		for ch := 0; ch < channels; ch++ {
 			increment := float32(2 * float32(math.Pi) * NormalisedCVToFrequency(data[ch+i]) / float32(o.sampleRate))
+			if o.Phase != nil {
+				increment *= 1 + o.phaseBuffer[ch+i]
+			}
 			data[ch+i] = o.WaveFunc(o.phase[ch])
 			o.phase[ch] += increment
 			if o.phase[ch] > math.Pi {

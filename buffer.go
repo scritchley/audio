@@ -80,18 +80,26 @@ func (c *Constant) SetOffset(offset float32) {
 	c.targetOffset.Store(offset)
 }
 
-func (c *Constant) SetGlideMs(glideMs float32) {
+func (c *Constant) SetGlideMs(glideMs float32) *Constant {
 	c.smoothing = (glideMs / 1000)
+	return c
+}
+
+func (c *Constant) getValue() float32 {
+	if c.smoothing == 0 {
+		return c.targetOffset.Load().(float32)
+	}
+	current := c.offset.Load().(float32)
+	target := c.targetOffset.Load().(float32)
+	current += (target - current) / (c.smoothing * float32(c.sampleRate))
+	c.offset.Store(current)
+	return current
 }
 
 func (c *Constant) Process(data []float32, channels int) {
 	for i := 0; i < len(data); i += channels {
-		current := c.offset.Load().(float32)
-		target := c.targetOffset.Load().(float32)
-		current += (target - current) / (c.smoothing * float32(c.sampleRate))
-		c.offset.Store(current)
 		for ch := 0; ch < channels; ch++ {
-			data[ch+i] = current
+			data[ch+i] = c.getValue()
 		}
 	}
 }
@@ -116,5 +124,17 @@ func (a *Amplifier) Process(data []float32, channels int) {
 		for ch := 0; ch < channels; ch++ {
 			data[ch+i] *= a.gainBuffer[ch+i]
 		}
+	}
+}
+
+type Chain []Processor
+
+func NewChain(processors ...Processor) Chain {
+	return Chain(processors)
+}
+
+func (c Chain) Process(data []float32, channels int) {
+	for i := range c {
+		c[i].Process(data, channels)
 	}
 }

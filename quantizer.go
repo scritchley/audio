@@ -2,16 +2,20 @@ package audio
 
 type Scale []Interval
 
+func (s Scale) Shift(shift int) Scale {
+	return Scale(append(s[shift:], s[:shift]...))
+}
+
 // Quantize returns a slice of quantized normalized voltage values representing the scale.
-func (s Scale) Quantize(tonic float32, input float32) float32 {
+func (s Scale) Quantize(root float32, input float32) float32 {
 	var i int
 	for {
-		if tonic >= input {
+		if root >= input {
 			break
 		}
-		tonic += s[i%len(s)].ToVoltage()
+		root += s[i%len(s)].ToVoltage()
 	}
-	return tonic
+	return root
 }
 
 const (
@@ -46,7 +50,14 @@ var (
 		Tone,
 		SemiTone,
 	}
-	MinorScale = Scale{
+	IonianMode     = MajorScale
+	DorianMode     = MajorScale.Shift(1)
+	PhrygianMode   = MajorScale.Shift(2)
+	LydianMode     = MajorScale.Shift(3)
+	MixolydianMode = MajorScale.Shift(4)
+	AeolianMode    = MajorScale.Shift(5)
+	LocrianMode    = MajorScale.Shift(6)
+	MinorScale     = Scale{
 		Tone,
 		SemiTone,
 		Tone,

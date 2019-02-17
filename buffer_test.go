@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 )
 
 func TestBuffer(t *testing.T) {
+
+	fmt.Println(AeolianMode)
 
 	portmidi.Initialize()
 	defer portmidi.Terminate()
@@ -25,9 +28,25 @@ func TestBuffer(t *testing.T) {
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
-		o := NewOscillator(Sawtooth)
-	o.Frequency = q
+	mod := NewOscillator(Sine)
+	mod.Frequency = m.Control(84)
+	modAmp := NewAmplifier()
+	modAmp.Gain = m.Control(5)
+	modChain := NewChain(
+		mod,
+		modAmp,
+	)
 
+	o := NewOscillator(Sine)
+	o.Frequency = m.CV
+	o.Phase = modChain
+
+	a := NewAmplifier()
+	a.Gain = m.Gate
+
+	f := NewFilter()
+	f.CutOff = m.Control(72)
+	f.Resonance = m.Control(73)
 
 	// c := NewConstant(0.01)
 	// c.SetGlideMs(5000)
@@ -49,6 +68,7 @@ func TestBuffer(t *testing.T) {
 
 	stream, err := portaudio.OpenDefaultStream(0, 1, DefaultSampleRate, 0, func(out [][]float32) {
 		o.Process(out[0], 1)
+		f.Process(out[0], 1)
 		a.Process(out[0], 1)
 		// d.Process(out[0], 1)
 	})
@@ -74,11 +94,7 @@ func TestBuffer(t *testing.T) {
 
 	// time.Sleep(5 * time.Second)
 
-	time.Sleep(5 * time.Second)
-
-	c.SetOffset(1)
-
-	time.Sleep(10 * time.Second)
+	time.Sleep(time.Hour)
 
 	stream.Stop()
 
