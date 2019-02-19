@@ -138,3 +138,23 @@ func (c Chain) Process(data []float32, channels int) {
 		c[i].Process(data, channels)
 	}
 }
+
+type ProcessorFunc func(data []float32, channels int)
+
+func (p ProcessorFunc) Process(data []float32, channels int) {
+	p(data, channels)
+}
+
+func Add(a, b Processor) Processor {
+	var bBuffer []float32
+	return ProcessorFunc(func(data []float32, channels int) {
+		if len(bBuffer) < len(data) {
+			bBuffer = make([]float32, len(data))
+		}
+		a.Process(data, channels)
+		b.Process(bBuffer, channels)
+		for i := range data {
+			data[i] += bBuffer[i]
+		}
+	})
+}

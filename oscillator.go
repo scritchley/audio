@@ -92,7 +92,7 @@ func Square(x float32) float32 {
 
 const SawtoothA = 1.0 / math.Pi
 
-// Triangle takes an input value from -Pi to Pi
+// Sawtooth takes an input value from -Pi to Pi
 // and returns a value between -1 and 1
 func Sawtooth(x float32) float32 {
 	return SawtoothA * x

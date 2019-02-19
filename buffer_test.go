@@ -28,10 +28,19 @@ func TestBuffer(t *testing.T) {
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
+	modA := NewOscillator(Sine)
+	modA.Frequency = Add(m.CV, m.Control(84))
+	modAAmp := NewAmplifier()
+	modAAmp.Gain = m.Control(5)
+	modAChain := NewChain(
+		modA,
+		modAAmp,
+	)
+
 	mod := NewOscillator(Sine)
-	mod.Frequency = m.Control(84)
+	mod.Frequency = modAChain
 	modAmp := NewAmplifier()
-	modAmp.Gain = m.Control(5)
+	modAmp.Gain = m.Control(71)
 	modChain := NewChain(
 		mod,
 		modAmp,

@@ -1,6 +1,8 @@
 package audio
 
 import (
+	"fmt"
+
 	"github.com/rakyll/portmidi"
 )
 
@@ -48,6 +50,7 @@ func (m *MidiInput) Listen() {
 			m.CV.SetOffset(MidiToNormalizedCV(msg.Data1))
 			lastNote = msg.Data1
 		case Control:
+			fmt.Println(msg.Data1)
 			if c, ok := m.control[msg.Data1]; ok {
 				c.SetOffset((MidiToNormalizedCV(msg.Data2)))
 			}
