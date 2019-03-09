@@ -21,8 +21,8 @@ type MidiInput struct {
 func NewMidiInput(stream *portmidi.Stream) *MidiInput {
 	m := &MidiInput{
 		Stream:  stream,
-		Gate:    NewConstant(0).SetGlideMs(1),
-		CV:      NewConstant(0).SetGlideMs(0),
+		Gate:    NewConstant(0).SetTransitionTime(1),
+		CV:      NewConstant(0).SetTransitionTime(0),
 		control: make(map[int64]*Constant),
 	}
 	go m.Listen()
@@ -30,7 +30,7 @@ func NewMidiInput(stream *portmidi.Stream) *MidiInput {
 }
 
 func (m *MidiInput) Control(i int64) *Constant {
-	m.control[i] = NewConstant(0).SetGlideMs(10)
+	m.control[i] = NewConstant(0).SetTransitionTime(10)
 	return m.control[i]
 }
 

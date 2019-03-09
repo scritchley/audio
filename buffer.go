@@ -1,8 +1,8 @@
 package audio
 
 import (
-	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -12,67 +12,32 @@ const (
 	DefaultSampleRate = 44100
 )
 
+// Processor is an interface that processes an audio buffer.
 type Processor interface {
+	// Process processes the provided audio data. The number
+	// of channels is specified using the channels argument.
+	// Channel data is interlaced in the data slice.
 	Process(data []float32, channels int)
 }
 
-type Connection chan bool
-
-func (c Connection) Disconnect() {
-	c <- true
-}
-
-func (c Connection) Wrap(conn Connection) Connection {
-	go func() {
-		<-c
-		conn.Disconnect()
-	}()
-	return c
-}
-
-type Writer interface {
-	Write(...float32)
-}
-
-// Buffer is a buffer of float32 values representing a single channel.
-type Buffer struct {
-	mtx  sync.Mutex
-	data []float32
-}
-
-// MakeBuffer returns a new Buffer with the provided size.
-func MakeBuffer(size int) Buffer {
-	return Buffer{data: make([]float32, size)}
-}
-
-func (b Buffer) Resize(size int) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-	b.data = make([]float32, size)
-}
-
-func (b Buffer) Clear() {
-	for i := range b.data {
-		b.data[i] = 0
-	}
-}
-
+// Constant is a constant source that writes its offset value to the output buffer.
 type Constant struct {
-	sampleRate   int
-	targetOffset atomic.Value
-	offset       atomic.Value
-	smoothing    float32
+	sampleRate         int
+	targetOffset       atomic.Value
+	offset             atomic.Value
+	transitionDuration time.Duration
 }
 
-func NewConstant(offset float32) *Constant {
+// NewConstant retusn a new Constant with the provided initial offset.
+func NewConstant(initialOffset float32) *Constant {
 	var targetOffsetValue, offsetValue atomic.Value
-	targetOffsetValue.Store(offset)
-	offsetValue.Store(offset)
+	targetOffsetValue.Store(initialOffset)
+	offsetValue.Store(initialOffset)
 	return &Constant{
-		sampleRate:   DefaultSampleRate,
-		targetOffset: targetOffsetValue,
-		offset:       offsetValue,
-		smoothing:    0.1,
+		sampleRate:         DefaultSampleRate,
+		targetOffset:       targetOffsetValue,
+		offset:             offsetValue,
+		transitionDuration: 0,
 	}
 }
 
@@ -80,26 +45,27 @@ func (c *Constant) SetOffset(offset float32) {
 	c.targetOffset.Store(offset)
 }
 
-func (c *Constant) SetGlideMs(glideMs float32) *Constant {
-	c.smoothing = (glideMs / 1000)
+func (c *Constant) SetTransitionTime(duration time.Duration) *Constant {
+	c.transitionDuration = duration
 	return c
 }
 
 func (c *Constant) getValue() float32 {
-	if c.smoothing == 0 {
+	if c.transitionDuration == 0 {
 		return c.targetOffset.Load().(float32)
 	}
 	current := c.offset.Load().(float32)
 	target := c.targetOffset.Load().(float32)
-	current += (target - current) / (c.smoothing * float32(c.sampleRate))
+	current += (target - current) / (0.1 * float32(c.sampleRate))
 	c.offset.Store(current)
 	return current
 }
 
 func (c *Constant) Process(data []float32, channels int) {
 	for i := 0; i < len(data); i += channels {
+		val := c.getValue()
 		for ch := 0; ch < channels; ch++ {
-			data[ch+i] = c.getValue()
+			data[ch+i] = val
 		}
 	}
 }
@@ -127,24 +93,30 @@ func (a *Amplifier) Process(data []float32, channels int) {
 	}
 }
 
-type Chain []Processor
+// ProcessorChain is a chain of Processors.
+type ProcessorChain []Processor
 
-func NewChain(processors ...Processor) Chain {
-	return Chain(processors)
+// NewProcessorChain returns a ProcessorChain using the provided Processors.
+func NewProcessorChain(processors ...Processor) ProcessorChain {
+	return ProcessorChain(processors)
 }
 
-func (c Chain) Process(data []float32, channels int) {
+// Process calls each Processor sequentially on the provided data.
+func (c ProcessorChain) Process(data []float32, channels int) {
 	for i := range c {
 		c[i].Process(data, channels)
 	}
 }
 
+// ProcessorFunc is a func that processes an audio input.s
 type ProcessorFunc func(data []float32, channels int)
 
+// Process calls ProcessorFunc passing in the provided data.
 func (p ProcessorFunc) Process(data []float32, channels int) {
 	p(data, channels)
 }
 
+// Add reads a into the provided buffer and then adds b.
 func Add(a, b Processor) Processor {
 	var bBuffer []float32
 	return ProcessorFunc(func(data []float32, channels int) {
@@ -155,6 +127,21 @@ func Add(a, b Processor) Processor {
 		b.Process(bBuffer, channels)
 		for i := range data {
 			data[i] += bBuffer[i]
+		}
+	})
+}
+
+// Multiply reads a into the provided buffer and then multiples by b.
+func Multiply(a, b Processor) Processor {
+	var bBuffer []float32
+	return ProcessorFunc(func(data []float32, channels int) {
+		if len(bBuffer) < len(data) {
+			bBuffer = make([]float32, len(data))
+		}
+		a.Process(data, channels)
+		b.Process(bBuffer, channels)
+		for i := range data {
+			data[i] *= bBuffer[i]
 		}
 	})
 }

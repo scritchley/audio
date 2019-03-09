@@ -3,12 +3,37 @@ package audio
 import (
 	"fmt"
 	"log"
+	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
 )
+
+func TestSelf(t *testing.T) {
+
+	portaudio.Initialize()
+	defer portaudio.Terminate()
+
+	o := NewOscillator(Sawtooth)
+	o.Frequency = NewConstant(0.55)
+
+	stream, err := portaudio.OpenDefaultStream(0, 1, DefaultSampleRate, 0, func(out [][]float32) {
+		o.Process(out[0], 1)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream.Start()
+
+	time.Sleep(time.Second * 10)
+
+	stream.Stop()
+
+}
 
 func TestBuffer(t *testing.T) {
 
@@ -32,7 +57,7 @@ func TestBuffer(t *testing.T) {
 	modA.Frequency = Add(m.CV, m.Control(84))
 	modAAmp := NewAmplifier()
 	modAAmp.Gain = m.Control(5)
-	modAChain := NewChain(
+	modAChain := NewProcessorChain(
 		modA,
 		modAAmp,
 	)
@@ -41,7 +66,7 @@ func TestBuffer(t *testing.T) {
 	mod.Frequency = modAChain
 	modAmp := NewAmplifier()
 	modAmp.Gain = m.Control(71)
-	modChain := NewChain(
+	modChain := NewProcessorChain(
 		mod,
 		modAmp,
 	)
@@ -104,6 +129,75 @@ func TestBuffer(t *testing.T) {
 	// time.Sleep(5 * time.Second)
 
 	time.Sleep(time.Hour)
+
+	stream.Stop()
+
+}
+
+func TestBasic(t *testing.T) {
+
+	portaudio.Initialize()
+	defer portaudio.Terminate()
+
+	portmidi.Initialize()
+	defer portmidi.Terminate()
+
+	var deviceID, deviceOutID portmidi.DeviceID
+	for i := 0; i < portmidi.CountDevices(); i++ {
+
+		info := portmidi.Info(portmidi.DeviceID(i))
+		if strings.Contains(info.Name, "Launchpad Mini") && info.IsInputAvailable {
+			deviceID = portmidi.DeviceID(i)
+		}
+		if strings.Contains(info.Name, "Launchpad Mini") && info.IsOutputAvailable {
+			deviceOutID = portmidi.DeviceID(i)
+		}
+	}
+
+	out, err := portmidi.NewOutputStream(deviceOutID, 1024, 100)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		for {
+			out.WriteShort(144, rand.Int63n(127), rand.Int63n(127))
+			time.Sleep(16 * time.Millisecond)
+		}
+	}()
+
+	in, err := portmidi.NewInputStream(deviceID, 1024)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer in.Close()
+
+	m := NewMidiInput(in)
+
+	mod := NewOscillator(Sine)
+	mod.Frequency = m.CV
+
+	o := NewOscillator(Sine)
+	o.Frequency = m.CV
+	o.Phase = mod
+
+	a := NewAmplifier()
+	a.Gain = m.Gate
+
+	ch := NewProcessorChain(
+		o,
+		a,
+	)
+
+	stream, err := portaudio.OpenDefaultStream(0, 1, DefaultSampleRate, 0, func(out [][]float32) {
+		ch.Process(out[0], 1)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream.Start()
+
+	time.Sleep(300 * time.Second)
 
 	stream.Stop()
 

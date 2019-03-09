@@ -1,31 +1,33 @@
 package audio
 
+import "time"
+
 type Envelope struct {
 	Gate          Processor
 	Attack        Processor
-	AttackTimeMs  float32
+	AttackTimeMs  time.Duration
 	attackBuffer  []float32
 	Decay         Processor
-	DecayTimeMs   float32
+	DecayTimeMs   time.Duration
 	decayBuffer   []float32
 	Sustain       Processor
 	sustainBuffer []float32
 	Release       Processor
-	ReleaseTimeMs float32
+	ReleaseTimeMs time.Duration
 	releaseBuffer []float32
 	*Constant
 }
 
 func NewEnvelope() *Envelope {
 	return &Envelope{
-		Attack:        NewConstant(0).SetGlideMs(10),
-		AttackTimeMs:  50,
-		Decay:         NewConstant(0).SetGlideMs(10),
-		DecayTimeMs:   1000,
-		Sustain:       NewConstant(1).SetGlideMs(10),
-		Release:       NewConstant(0).SetGlideMs(10),
-		ReleaseTimeMs: 1000,
-		Constant:      NewConstant(0).SetGlideMs(1000),
+		Attack:        NewConstant(0).SetTransitionTime(10),
+		AttackTimeMs:  time.Second,
+		Decay:         NewConstant(0).SetTransitionTime(10),
+		DecayTimeMs:   time.Second,
+		Sustain:       NewConstant(1).SetTransitionTime(10),
+		Release:       NewConstant(0).SetTransitionTime(10),
+		ReleaseTimeMs: time.Second,
+		Constant:      NewConstant(0).SetTransitionTime(1000),
 	}
 }
 
@@ -60,9 +62,9 @@ func (e *Envelope) Process(data []float32, channels int) {
 	for i := 0; i < len(data); i += channels {
 		for ch := 0; ch < channels; ch++ {
 			if data[ch+i] > 0.05 {
-				e.Constant.SetGlideMs(e.AttackTimeMs)
+				e.Constant.SetTransitionTime(e.AttackTimeMs)
 			} else {
-				e.Constant.SetGlideMs(e.ReleaseTimeMs)
+				e.Constant.SetTransitionTime(e.ReleaseTimeMs)
 			}
 			e.Constant.SetOffset(data[ch+i])
 			data[ch+i] = e.Constant.getValue()
